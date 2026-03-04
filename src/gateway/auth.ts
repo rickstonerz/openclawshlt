@@ -82,6 +82,14 @@ export type AuthorizeGatewayConnectParams = {
   };
 };
 
+type SharedSecretAuthParams = {
+  auth: ResolvedGatewayAuth;
+  connectAuth?: ConnectAuth | null;
+  limiter?: AuthRateLimiter;
+  ip?: string;
+  rateLimitScope: string;
+};
+
 type TailscaleUser = {
   login: string;
   name: string;
@@ -358,6 +366,30 @@ function authorizeTokenAuth(params: {
   return { ok: true, method: "token" };
 }
 
+function authorizeSharedSecretFallback(params: SharedSecretAuthParams): GatewayAuthResult | null {
+  const { auth, connectAuth, limiter, ip, rateLimitScope } = params;
+
+  if (auth.password && connectAuth?.password) {
+    if (!safeEqualSecret(connectAuth.password, auth.password)) {
+      limiter?.recordFailure(ip, rateLimitScope);
+      return { ok: false, reason: "password_mismatch" };
+    }
+    limiter?.reset(ip, rateLimitScope);
+    return { ok: true, method: "password" };
+  }
+
+  if (auth.token && connectAuth?.token) {
+    if (!safeEqualSecret(connectAuth.token, auth.token)) {
+      limiter?.recordFailure(ip, rateLimitScope);
+      return { ok: false, reason: "token_mismatch" };
+    }
+    limiter?.reset(ip, rateLimitScope);
+    return { ok: true, method: "token" };
+  }
+
+  return null;
+}
+
 export async function authorizeGatewayConnect(
   params: AuthorizeGatewayConnectParams,
 ): Promise<GatewayAuthResult> {
@@ -411,8 +443,27 @@ async function authorizeGatewayConnectCore(
     trustedProxies,
     params.allowRealIpFallback === true,
   );
+  const localLoopbackWithoutProxyHeaders =
+    Boolean(req) &&
+    isLoopbackAddress(req?.socket?.remoteAddress) &&
+    !req?.headers?.["x-forwarded-for"] &&
+    !req?.headers?.["x-real-ip"] &&
+    !req?.headers?.["x-forwarded-host"];
 
   if (auth.mode === "trusted-proxy") {
+    if (localDirect || localLoopbackWithoutProxyHeaders) {
+      const sharedSecretFallback = authorizeSharedSecretFallback({
+        auth,
+        connectAuth,
+        limiter,
+        ip,
+        rateLimitScope,
+      });
+      if (sharedSecretFallback) {
+        return sharedSecretFallback;
+      }
+    }
+
     // Same-host reverse proxies may forward identity headers without a full
     // forwarded chain; keep those on the trusted-proxy path so allowUsers and
     // requiredHeaders still apply.
