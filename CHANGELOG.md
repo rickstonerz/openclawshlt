@@ -134,6 +134,7 @@ Docs: https://docs.openclaw.ai
 - Routing/legacy route guard tightening: require legacy session-key channel hints to match the saved delivery channel before inheriting external routing metadata, preventing custom namespaced keys like `agent:<agent>:work:<ticket>` from inheriting stale non-webchat routes.
 - Gateway/internal client routing continuity: prevent webchat/TUI/UI turns from inheriting stale external reply routes by requiring explicit `deliver: true` for external delivery, keeping main-session external inheritance scoped to non-Webchat/UI clients, and honoring configured `session.mainKey` when identifying main-session continuity. (from #35321, #34635, #35356) Thanks @alexyyyander and @Octane0411.
 - Security/auth labels: remove token and API-key snippets from user-facing auth status labels so `/status` and `/models` do not expose credential fragments. (#33262) thanks @cu1ch3n.
+- Models/MiniMax portal vision routing: add `MiniMax-VL-01` to the `minimax-portal` provider, route portal image understanding through the MiniMax VLM endpoint, and align media auto-selection plus Telegram sticker description with the shared portal image provider path. (#33953) Thanks @tars90percent.
 - Auth/credential semantics: align profile eligibility + probe diagnostics with SecretRef/expiry rules and harden browser download atomic writes. (#33733) thanks @joshavant.
 - Security/audit denyCommands guidance: suggest likely exact node command IDs for unknown `gateway.nodes.denyCommands` entries so ineffective denylist entries are easier to correct. (#29713) thanks @liquidhorizon88-bot.
 - Agents/overload failover handling: classify overloaded provider failures separately from rate limits/status timeouts, add short overload backoff before retry/failover, record overloaded prompt/assistant failures as transient auth-profile cooldowns (with probeable same-provider fallback) instead of treating them like persistent auth/billing failures, and keep one-shot cron retry classification aligned so overloaded fallback summaries still count as transient retries.
@@ -271,6 +272,7 @@ Docs: https://docs.openclaw.ai
 - Agents/OpenAI WS reconnect retry accounting: avoid double retry scheduling when reconnect failures emit both `error` and `close`, so retry budgets track actual reconnect attempts instead of exhausting early. (#39133) Thanks @scoootscooob.
 - Daemon/Windows schtasks runtime detection: use locale-invariant `Last Run Result` running codes (`0x41301`/`267009`) as the primary running signal so `openclaw node status` no longer misreports active tasks as stopped on non-English Windows locales. (#39076) Thanks @ademczuk.
 - Usage/token count formatting: round near-million token counts to millions (`1.0m`) instead of `1000k`, with explicit boundary coverage for `999_499` and `999_500`. (#39129) Thanks @CurryMessi.
+- Gateway/session bootstrap cache invalidation ordering: clear bootstrap snapshots only after active embedded-run shutdown wait completes, preventing dying runs from repopulating stale cache between `/new`/`sessions.reset` turns. (#38873) Thanks @MumuTW.
 
 ## 2026.3.2
 
