@@ -139,8 +139,8 @@ export function isLocalDirectRequest(
     req.headers?.["x-real-ip"] ||
     req.headers?.["x-forwarded-host"],
   );
-
-  const remoteIsTrustedProxy = isTrustedProxyAddress(req.socket?.remoteAddress, trustedProxies);
+  const remoteAddr = req.socket?.remoteAddress;
+  const remoteIsTrustedProxy = isTrustedProxyAddress(remoteAddr, trustedProxies);
   return isLocalishHost(req.headers?.host) && (!hasForwarded || remoteIsTrustedProxy);
 }
 
@@ -417,6 +417,34 @@ function hasConfiguredTrustedProxyHeaders(
   });
 }
 
+function hasAnyProxyForwardingContext(req?: IncomingMessage): boolean {
+  if (!req) {
+    return false;
+  }
+  return Boolean(
+    req.headers.forwarded ||
+      req.headers["x-forwarded-for"] ||
+      req.headers["x-real-ip"] ||
+      req.headers["x-forwarded-host"] ||
+      req.headers["x-forwarded-proto"],
+  );
+}
+
+function shouldAllowTrustedProxySharedSecretFallback(
+  req: IncomingMessage | undefined,
+  trustedProxyConfig: GatewayTrustedProxyConfig | undefined,
+): boolean {
+  if (!req) {
+    return false;
+  }
+  return (
+    isLocalishHost(req.headers?.host) &&
+    isLoopbackAddress(req.socket?.remoteAddress) &&
+    !hasAnyProxyForwardingContext(req) &&
+    !hasConfiguredTrustedProxyHeaders(req, trustedProxyConfig)
+  );
+}
+
 export async function authorizeGatewayConnect(
   params: AuthorizeGatewayConnectParams,
 ): Promise<GatewayAuthResult> {
@@ -435,13 +463,13 @@ export async function authorizeGatewayConnect(
     resolveRequestClientIp(req, trustedProxies, params.allowRealIpFallback === true) ??
     req?.socket?.remoteAddress;
   const rateLimitScope = params.rateLimitScope ?? AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET;
-  const localLoopbackWithoutProxyHeaders =
-    Boolean(req) &&
-    isLoopbackAddress(req?.socket?.remoteAddress) &&
-    !hasConfiguredTrustedProxyHeaders(req, auth.trustedProxy);
+  const localTrustedProxyFallback = shouldAllowTrustedProxySharedSecretFallback(
+    req,
+    auth.trustedProxy,
+  );
 
   if (auth.mode === "trusted-proxy") {
-    if (localLoopbackWithoutProxyHeaders && limiter) {
+    if (localTrustedProxyFallback && limiter) {
       const rlCheck: RateLimitCheckResult = limiter.check(ip, rateLimitScope);
       if (!rlCheck.allowed) {
         return {
@@ -453,7 +481,7 @@ export async function authorizeGatewayConnect(
       }
     }
 
-    if (localLoopbackWithoutProxyHeaders) {
+    if (localTrustedProxyFallback) {
       const sharedSecretFallback = authorizeSharedSecretFallback({
         auth,
         connectAuth,
