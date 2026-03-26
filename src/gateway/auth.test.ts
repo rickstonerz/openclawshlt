@@ -513,6 +513,29 @@ describe("trusted-proxy auth", () => {
     expect(localToken.method).toBe("token");
   });
 
+  it("prefers token auth when bearer-style fallback populates both token and password", async () => {
+    const res = await authorizeGatewayConnect({
+      auth: {
+        mode: "trusted-proxy",
+        allowTailscale: false,
+        token: "secret",
+        password: "different-password",
+        trustedProxy: trustedProxyConfig,
+      },
+      connectAuth: { token: "secret", password: "secret" },
+      trustedProxies: ["127.0.0.1"],
+      req: {
+        socket: { remoteAddress: "127.0.0.1" },
+        headers: {
+          host: "127.0.0.1:19001",
+        },
+      } as never,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.method).toBe("token");
+  });
+
   it("does not let local fallback preempt valid trusted-proxy header auth", async () => {
     const res = await authorizeGatewayConnect({
       auth: {
