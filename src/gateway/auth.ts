@@ -423,10 +423,10 @@ function hasAnyProxyForwardingContext(req?: IncomingMessage): boolean {
   }
   return Boolean(
     req.headers.forwarded ||
-      req.headers["x-forwarded-for"] ||
-      req.headers["x-real-ip"] ||
-      req.headers["x-forwarded-host"] ||
-      req.headers["x-forwarded-proto"],
+    req.headers["x-forwarded-for"] ||
+    req.headers["x-real-ip"] ||
+    req.headers["x-forwarded-host"] ||
+    req.headers["x-forwarded-proto"],
   );
 }
 
