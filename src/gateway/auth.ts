@@ -369,15 +369,8 @@ function authorizeTokenAuth(params: {
 function authorizeSharedSecretFallback(params: SharedSecretAuthParams): GatewayAuthResult | null {
   const { auth, connectAuth, limiter, ip, rateLimitScope } = params;
 
-  if (auth.password && connectAuth?.password) {
-    if (!safeEqualSecret(connectAuth.password, auth.password)) {
-      limiter?.recordFailure(ip, rateLimitScope);
-      return { ok: false, reason: "password_mismatch" };
-    }
-    limiter?.reset(ip, rateLimitScope);
-    return { ok: true, method: "password" };
-  }
-
+  // HTTP bearer auth paths populate both token and password with the same
+  // bearer token value, so prefer token auth when both shared secrets exist.
   if (auth.token && connectAuth?.token) {
     if (!safeEqualSecret(connectAuth.token, auth.token)) {
       limiter?.recordFailure(ip, rateLimitScope);
@@ -385,6 +378,15 @@ function authorizeSharedSecretFallback(params: SharedSecretAuthParams): GatewayA
     }
     limiter?.reset(ip, rateLimitScope);
     return { ok: true, method: "token" };
+  }
+
+  if (auth.password && connectAuth?.password) {
+    if (!safeEqualSecret(connectAuth.password, auth.password)) {
+      limiter?.recordFailure(ip, rateLimitScope);
+      return { ok: false, reason: "password_mismatch" };
+    }
+    limiter?.reset(ip, rateLimitScope);
+    return { ok: true, method: "password" };
   }
 
   return null;
